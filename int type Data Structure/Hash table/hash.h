@@ -4,7 +4,6 @@ typedef unsigned char byte;
 typedef struct tagHASH HASH;
 struct tagHASH{
 	int* key;
-	byte* bloom;
 	int size, bucket;
 };
 

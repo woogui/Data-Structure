@@ -12,13 +12,13 @@ byte bit_position(int num){
 //Iterators
 int* begin(HASH* h){
 	int i = 0;
-	while (i < h->bucket && (*(h->bloom + i / 8)&bit_position(i)) != bit_position(i)){
+	while (i < h->bucket && (*((byte*)h->key + i / 8)&bit_position(i)) != bit_position(i)){
 		i++;
 	}
-	return h->key + i;
+	return (int*)((byte*)h->key + h->bucket / 8 + 1) + i;
 }
 int* end(HASH* h){
-	return h->key+h->bucket;
+	return (int*)((byte*)h->key + h->bucket / 8 + 1) + h->bucket;
 }
 
 //Capacity
@@ -36,8 +36,8 @@ int max_size(HASH* h){
 int find(HASH* h, int key){
 	int idx = hash_fuc1(h, key);
 	int cnt = 0;
-	while (cnt<h->bucket){
-		if (*(h->key + idx) == key)
+	while (cnt < h->bucket){
+		if (*((int*)((byte*)h->key + h->bucket / 8 + 1) + idx) == key)
 			return idx;
 		idx = hash_fuc2(h, cnt, key);
 		cnt++;
@@ -77,26 +77,27 @@ void insert(HASH* h, int key){
 	}
 	int idx = hash_fuc1(h, key);
 	int cnt = 0;
-	while ((*(h->bloom + idx / 8)&bit_position(idx)) == bit_position(idx)){
-		if (*(h->key + idx) == key)
+	while ((*((byte*)h->key + idx / 8)&bit_position(idx)) == bit_position(idx)){
+		if (*((int*)((byte*)h->key + h->bucket / 8 + 1) + idx) == key)
 			return;
 		idx = hash_fuc2(h, cnt, key);
 		cnt++;
 	}
-	*(h->key + idx) = key;
-	*(h->bloom + idx / 8) |= bit_position(idx);
+	*((int*)((byte*)h->key + h->bucket / 8 + 1) + idx) = key;
+	*((byte*)h->key + idx / 8) |= bit_position(idx);
 	h->size++;
 }
 void erase(HASH* h, int i){
-	if ((*(h->bloom + i / 8)&bit_position(i)) != bit_position(i))
+	if ((*((byte*)h->key + i / 8)&bit_position(i)) != bit_position(i))
 		return;
-	*(h->bloom + i / 8) ^= bit_position(i);
+	*((byte*)h->key + i / 8) ^= bit_position(i);
 	h->size--;
 }
 void clear(HASH* h){
 	for (int i = 0; i<h->bucket / 8 + 1; i++){
-		*(h->bloom + i) = NULL;
+		*((byte*)h->key + i) = NULL;
 	}
+	h->size = 0;
 }
 
 //Hash policy
@@ -104,34 +105,31 @@ void rehash(HASH* h, int n){
 	while (n == 0 || (double)h->size / n * 100 > 70){
 		n = n ? close_prime(n * 2) : 7;
 	}
-	int* tmp = (int*)malloc(n*sizeof(int));
-	byte* bloom = (byte*)calloc(n / 8 + 1, sizeof(byte));
+	byte* tmp = (byte*)calloc(n*sizeof(int)+n/8+1,sizeof(byte));
 	int i = 0, t = h->bucket;
 	h->bucket = n;
-	while (h->bloom && i < t){
-		if ((*(h->bloom + i / 8)&bit_position(i)) == bit_position(i)){
-			int idx = hash_fuc1(h, *(h->key + i));
+	while (h->key && i < t){
+		if ((*((byte*)h->key + i / 8)&bit_position(i)) == bit_position(i)){
+			int idx = hash_fuc1(h, *((int*)((byte*)h->key + t / 8 + 1) + i));
 			int cnt = 0;
-			while ((*(bloom + idx / 8)&bit_position(idx)) == bit_position(idx)){
-				idx = hash_fuc2(h, cnt, *(h->key + i));
+			while ((*(tmp + idx / 8)&bit_position(idx)) == bit_position(idx)){
+				idx = hash_fuc2(h, cnt, *((int*)((byte*)h->key + t / 8 + 1) + i));
 				cnt++;
 			}
-			*(tmp + idx) = *(h->key + i);
-			*(bloom + idx / 8) |= bit_position(idx);
+			*((int*)(tmp + h->bucket / 8 + 1) + idx) = *((int*)((byte*)h->key + t / 8 + 1) + i);
+			*(tmp + idx / 8) |= bit_position(idx);
 		}
 		i++;
 	}
 	if (h->key){
 		free(h->key);
-		free(h->bloom);
 	}
 	h->key = tmp;
-	h->bloom = bloom;
 }
 
 //traversing
 int* to_next(HASH* h, int* it){
-	int i = it - h->key;
-	while (++i < h->bucket && (*(h->bloom + i / 8)&bit_position(i)) != bit_position(i));
-	return h->key + i;
+	int i = it - (int*)((byte*)h->key + h->bucket / 8 + 1);
+	while (++i < h->bucket && (*((byte*)h->key + i / 8)&bit_position(i)) != bit_position(i));
+	return (int*)((byte*)h->key + h->bucket / 8 + 1) + i;
 }
